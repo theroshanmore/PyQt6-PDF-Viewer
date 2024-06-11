@@ -1,8 +1,9 @@
 from PyQt6.QtCore import QUrl, Qt
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QFileDialog, QPushButton
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QFileDialog, QPushButton, QListWidget
 from PyQt6.QtGui import QAction
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
+import os
 
 class SearchLineEdit(QLineEdit):
     def __init__(self, parent):
@@ -33,32 +34,45 @@ class MainWindow(QMainWindow):
         
         self.layout.addWidget(self.webView)
 
-        self.search_input = SearchLineEdit(self)
-        self.search_input.setPlaceholderText("Enter text to search...")
-        self.layout.addWidget(self.search_input)
+        # self.search_input = SearchLineEdit(self)
+        # self.search_input.setPlaceholderText("Enter text to search...")
+        # self.layout.addWidget(self.search_input)
+
+        self.file_list = QListWidget()
+        self.file_list.itemClicked.connect(self.load_pdf_from_list)
+        self.layout.addWidget(self.file_list)
 
         self.create_file_menu()
 
     def create_file_menu(self):
         menubar = self.menuBar()
-        file_menu = menubar.addMenu('Choose PDF')
+        file_menu = menubar.addMenu('File')
 
-        open_action = QAction('Open', self)
-        open_action.triggered.connect(self.open_file_dialog)
+        open_action = QAction('Open Directory', self)
+        open_action.triggered.connect(self.open_directory_dialog)
         file_menu.addAction(open_action)
 
-    def open_file_dialog(self):
-        file_dialog = QFileDialog()
-        filename, _ = file_dialog.getOpenFileName(self, "Open PDF", "", "PDF Files (*.pdf)")
-        if filename:
-            self.webView.setUrl(QUrl("file:///" + filename.replace('\\', '/')))
+    def open_directory_dialog(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory:
+            self.populate_file_list(directory)
 
-    def search_text(self, text):
-        flag = QWebEnginePage.FindFlag.FindCaseSensitively
-        if text:
-            self.webView.page().findText(text, flag)
-        else:
-            self.webView.page().stopFinding()
+    def populate_file_list(self, directory):
+        self.file_list.clear()
+        for filename in os.listdir(directory):
+            if filename.lower().endswith('.pdf'):
+                self.file_list.addItem(os.path.join(directory, filename))
+    
+    def load_pdf_from_list(self, item):
+        filepath = item.text()
+        self.webView.setUrl(QUrl("file:///" + filepath.replace('\\', '/')))
+
+    # def search_text(self, text):
+    #     flag = QWebEnginePage.FindFlag.FindCaseSensitively
+    #     if text:
+    #         self.webView.page().findText(text, flag)
+    #     else:
+    #         self.webView.page().stopFinding()
 
 if __name__ == '__main__':
     import sys

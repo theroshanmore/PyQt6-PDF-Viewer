@@ -1,0 +1,194 @@
+import sys
+import os
+import json
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QFileDialog, QVBoxLayout, QHBoxLayout,
+    QWidget, QPushButton, QLabel, QListWidget, QRadioButton, QButtonGroup
+)
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtGui import QPixmap
+import fitz  # PyMuPDF
+from PyQt6.QtGui import QAction
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        # When we use super().__init__() within the __init__ method of a subclass, we are calling the __init__ method of the parent class to ensure that the parent class is properly initialized. 
+        # This does not replace the __init__ method of the subclass; instead, it allows the subclass to build upon the initialization logic defined in the parent class. 
+        # After calling super().__init__(), we can add additional initialization code specific to the subclass.
+        super(QMainWindow, self).__init__() # to call the constructor of the parent class
+
+        self.setWindowTitle("PDF Viewer with Page Marking")
+        self.setGeometry(50, 50, 500, 300) # (x0,y0, width, height)
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+
+        self.layout = QHBoxLayout()
+        self.central_widget.setLayout(self.layout)
+
+        # Folder list
+        self.file_list = QListWidget()
+        self.file_list.itemClicked.connect(self.load_pdf_from_list)
+        self.file_list.setFixedWidth(200)
+        self.layout.addWidget(self.file_list)
+
+        # PDF viewer
+        # self.viewer_layout = QVBoxLayout()
+        # self.file_list.setFixedWidth(500)
+        # self.viewer_layout.addLayout(self.viewer_layout)
+
+        self.page_label = QLabel()
+        self.layout.addWidget(self.page_label)
+
+        # self.webView =  QWebEngineView()
+        # self.webView.settings().setAttribute(self.webView.settings().WebAttribute.PluginsEnabled, True)
+        # self.webView.settings().setAttribute(self.webView.settings().WebAttribute.PdfViewerEnabled, True)
+        # self.layout.addWidget(self.webView)
+
+        # Navigation and marking buttons
+        self.button_layout = QVBoxLayout()
+        self.layout.addLayout(self.button_layout)
+
+        # self.prev_button = QPushButton("Previous Page")
+        # self.prev_button.clicked.connect(self.prev_page)
+        # self.button_layout.addWidget(self.prev_button)
+
+        # self.next_button = QPushButton("Next Page")
+        # self.next_button.clicked.connect(self.next_page)
+        # self.button_layout.addWidget(self.next_button)
+
+        # creating class radio buttons group
+        self.radio_button_group = QButtonGroup(self)
+
+        # creating radio buttons
+        self.class1_start_radio_button = QRadioButton("Class1 Start")
+        self.class1_end_radio_button = QRadioButton("Class1 End")
+        self.class2_start_radio_button = QRadioButton("Class2 Start")
+        self.class2_end_radio_button = QRadioButton("Class2 End")
+
+        # adding radio buttons to button group
+        self.radio_button_group.addButton(self.class1_start_radio_button)
+        self.radio_button_group.addButton(self.class1_end_radio_button)
+        self.radio_button_group.addButton(self.class2_start_radio_button)
+        self.radio_button_group.addButton(self.class2_end_radio_button)
+
+        # adding buttons to button layout
+        self.button_layout.addWidget(self.class1_start_radio_button)
+        self.button_layout.addWidget(self.class1_end_radio_button)
+        self.button_layout.addWidget(self.class2_start_radio_button)
+        self.button_layout.addWidget(self.class2_end_radio_button)
+
+        self.save_button = QPushButton("Save Marks")
+        self.save_button.clicked.connect(self.save_marks)
+        self.button_layout.addWidget(self.save_button)
+
+        self.load_button = QPushButton("Open PDF")
+        self.load_button.clicked.connect(self.open_pdf)
+        self.button_layout.addWidget(self.load_button)
+
+        self.current_file = None
+        self.current_page = 0
+        self.total_pages = 0
+        self.marks = {}
+
+        self.create_file_menu()
+
+    def open_pdf(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF File", "", "PDF Files (*.pdf)")
+        if file_path:
+            self.current_file = file_path
+            self.current_page = 0
+            self.load_pdf(file_path)
+            self.total_pages = fitz.open(file_path).page_count
+
+    def load_pdf(self, file_path):
+        self.display_pdf(file_path, self.current_page)
+
+    def display_pdf(self, file_path, page_number):
+        doc = fitz.open(file_path)
+        pixmap = self.render_page_as_pixmap(doc, page_number)
+        self.page_label.setPixmap(pixmap)
+        self.update_radio_buttons()
+
+    def render_page_as_pixmap(self, doc, page_number):
+        page = doc.load_page(page_number)
+        pixmap = page.get_pixmap()
+        img_bytes = pixmap.tobytes()
+        image = QPixmap()
+        image.loadFromData(img_bytes)
+        return image
+
+    def prev_page(self):
+        if self.current_file and self.current_page > 0:
+            self.current_page -= 1
+            self.display_pdf(self.current_file, self.current_page)
+
+    def next_page(self):
+        if self.current_file and self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.display_pdf(self.current_file, self.current_page)
+
+    def save_marks(self):
+        if self.marks:
+            save_path, _ = QFileDialog.getSaveFileName(self, "Save Marks", "", "JSON Files (*.json)")
+            if save_path:
+                with open(save_path, 'w') as f:
+                    json.dump(self.marks, f, indent=4)
+                print(f"Marks saved to {save_path}")
+
+    def create_file_menu(self):
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu('File')
+
+        open_action = QAction('Open Directory', self)
+        open_action.triggered.connect(self.open_directory_dialog)
+        file_menu.addAction(open_action)
+
+    def open_directory_dialog(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory:
+            self.populate_file_list(directory)
+
+    def populate_file_list(self, directory):
+        self.file_list.clear()
+        for filename in os.listdir(directory):
+            if filename.lower().endswith('.pdf'):
+                self.file_list.addItem(os.path.join(directory, filename))
+    
+    def load_pdf_from_list(self, item):
+        filepath = item.text()
+        self.current_file = filepath
+        self.current_page = 0
+        self.load_pdf(filepath)
+        self.total_pages = fitz.open(filepath).page_count
+
+    def update_radio_buttons(self):
+        self.class1_start_radio_button.setChecked(self.current_page + 1 == self.marks.get('Class1_start'))
+        self.class1_end_radio_button.setChecked(self.current_page + 1 == self.marks.get('Class1_end'))
+        self.class2_start_radio_button.setChecked(self.current_page + 1 == self.marks.get('Class2_start'))
+        self.class2_end_radio_button.setChecked(self.current_page + 1 == self.marks.get('Class2_end'))
+
+        if self.current_file:
+            self.mark_page(self.current_page)
+
+    def mark_page(self, page_number):
+        if self.current_file:
+            if self.class1_start_radio_button.isChecked():
+                self.marks['Class1_start'] = page_number + 1
+                print(f"Start page for Class1 marked as {page_number + 1}")
+            elif self.class1_end_radio_button.isChecked():
+                self.marks['Class1_end'] = page_number + 1
+                print(f"End page for Class1 marked as {page_number + 1}")
+            elif self.class2_start_radio_button.isChecked():
+                self.marks['Class2_start'] = page_number + 1
+                print(f"Start page for Class2 marked as {page_number + 1}")
+            elif self.class2_end_radio_button.isChecked():
+                self.marks['Class2_end'] = page_number + 1
+                print(f"End page for Class2 marked as {page_number + 1}")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
